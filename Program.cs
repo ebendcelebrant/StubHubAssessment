@@ -7,13 +7,7 @@ using System.Linq.Expressions;
 using System.Net;
 using System.Net.Http.Headers;
 using static TicketsConsole.Program;
-/*
-Let's say we're running a small entertainment business as a start-up. This means we're selling tickets to live events
-on a website. An email campaign service is what we are going to make here. We're building a marketing engine that
-will send notifications (emails, text messages) directly to the client and we'll add more features as we go.
-Please, instead of debuging with breakpoints, debug with "Console.Writeline();" for each task because the Interview
-will be in Coderpad and in that platform you cant do Breakpoints.
-*/
+
 namespace System.Runtime.CompilerServices
 {
     internal static class IsExternalInit { }
@@ -25,49 +19,7 @@ namespace TicketsConsole
         public const int CLOSEST_CITIES_LIMIT = 5;
         static void Main(string[] args)
         {
-            /*
-                1. You can see here a list of events, a customer object. Try to understand the code, make it compile.
-                2. The goal is to create a MarketingEngine class sending all events through the constructor as parameter and
-                make it print the events that are happening in the same city as the customer. To do that, inside this class, create a
-                SendCustomerNotifications method which will receive a customer as parameter and an Event parameter and will
-                mock the the Notification Service API. DON’T MODIFY THIS METHOD, unless you want to add the price to the
-                console.writeline for task 7. Add this ConsoleWriteLine inside the Method to mock the service. Inside this method you
-                can add the code you need to run this task correctly but you cant modify the console writeline:
-                Console.WriteLine($"{customer.Name} from {customer.City} event {e.Name} at {e.Date}");
-                3. As part of a new campaign, we need to be able to let customers know about events that are coming up
-                close to their next birthday. You can make a guess and add it to the MarketingEngine class if you want to. So we still
-                want to keep how things work now, which is that we email customers about events in their city or the event closest to
-                next customer's birthday, and then we email them again at some point during the year. The current customer, his
-                birthday is on may. So it's already in the past. So we want to find the next one, which is 23. How would you like the
-                code to be built? We don't just want functionality; we want more than that. We want to know how you plan to make
-                that work. Please code it.
-                4. The next requirement is to extend the solution to be able to send notifications for the five closest events to
-                the customer. The interviewer here can paste a method to help you, or ask you to search it. We will attach a way to
-                calculate the distance.
-                public record City(string Name, int X, int Y);
-                public static readonly IDictionary<string, City> Cities = new Dictionary<string, City>()
-                {
-                    { "New York", new City("New York", 3572, 1455) },
-                    { "Los Angeles", new City("Los Angeles", 462, 975) },
-                    { "San Francisco", new City("San Francisco", 183, 1233) },
-                    { "Boston", new City("Boston", 3778, 1566) },
-                    { "Chicago", new City("Chicago", 2608, 1525) },
-                    { "Washington", new City("Washington", 3358, 1320) },
-                };
-                var customerCityInfo = Cities.Where(c => c.Key == city).Single().Value;
-                var distance = Math.Abs(customerCityInfo.X - eventCityInfo.X) + Math.Abs(customerCityInfo.Y - eventCityInfo.Y);
-                5. If the calculation of the distances is an API call which could fail or is too expensive, how will you improve
-                the code written in 4? Think in caching the data which could be code it as a dictionary. You need to store the
-                distances between two cities. Example:
-                New York - Boston => 400
-                Boston - Washington => 540
-                Boston - New York => Should not exist because "New York - Boston" is already stored and the distance is the
-                same.
-                6. If the calculation of the distances is an API call which could fail, what can be done to avoid the failure?
-                Think in HTTPResponse Answers: Timeoute, 404, 403. How can you handle that exceptions? Code it.
-                7. If we also want to sort the resulting events by other fields like price, etc. to determine whichones to send to
-                the customer, how would you implement it? Code it.
-            */
+
             var events = new List<Event>{
                 new Event(1, "Phantom of the Opera", "New York", new DateTime(2023,12,23)),
                 new Event(2, "Metallica", "Los Angeles", new DateTime(2023,12,02)),
@@ -94,6 +46,9 @@ namespace TicketsConsole
             IMarketingEngine marketingEngine = new MarketingEngine(events);
             Console.WriteLine("Customer Birthday Notification");
             marketingEngine.SendClosestEventToBirtDayNotification(customer);
+            Console.WriteLine("");
+            Console.WriteLine("Same City Events Customer Notification");
+            marketingEngine.SendSameCityEventsNotification(customer);
             Console.WriteLine("");
             Console.WriteLine("Closest Events to Customer Notification");
             marketingEngine.SendClosestEventsToCustomerCity(customer, null);
@@ -147,6 +102,7 @@ namespace TicketsConsole
         public interface IMarketingEngine
         {
             void SendCustomerNotifications(Customer customer, Event e);
+            bool SendSameCityEventsNotification(Customer customer);
             bool SendClosestEventToBirtDayNotification(Customer customer);
             bool SendClosestEventsToCustomerCity(Customer customer, List<string>? sortList, bool shouldSort = false);
         }
@@ -165,9 +121,9 @@ namespace TicketsConsole
             }
             public bool SendSameCityEventsNotification(Customer customer)
             {
-                foreach(var marketingEvent in MarketingEvents)
+                foreach (var marketingEvent in MarketingEvents)
                 {
-                    if(marketingEvent.City == customer.City)
+                    if (marketingEvent.City == customer.City)
                         SendCustomerNotifications(customer, marketingEvent);
                 }
                 //simulate successful sending of notification
@@ -182,6 +138,14 @@ namespace TicketsConsole
                 //simulate successful sending of notification
                 return true;
             }
+            private IEnumerable<Event> ClosestEventsToDate(DateTime? date = null, int limit = 1)
+            {
+                var effectiveDate = date ?? DateTime.Now;
+
+                var closestEvents = MarketingEvents.Where(e => e.Date >= effectiveDate).OrderBy(e => e.Date).Take(limit);
+
+                return closestEvents;
+            }
 
             public bool SendClosestEventsToCustomerCity(Customer customer, List<string>? sortList = default, bool shouldSort = false)
             {
@@ -194,12 +158,17 @@ namespace TicketsConsole
                 //Dynamic sorting
                 foreach (var parameterName in sortList)
                 {
-                    closestEventsToCustomer = closestEventsToCustomer.AsQueryable().OrderBy(parameterName, false);
+                    closestEventsToCustomer = closestEventsToCustomer.AsQueryable().OrderBy(parameterName, true);
                 }
 
                 //Real life situation, events will be collated into a notification and sent at the same time
                 foreach (var closeEvent in closestEventsToCustomer)
                 {
+                    //Show Event Distances
+                    var cityDistanceKey = CityDistanceKey(closeEvent.City, customer.City);
+                    var eventDistance = CityDistanceCache.Where(c => c.Key == cityDistanceKey).Single().Value;
+                    Console.WriteLine($"Distance from {customer.City} to {closeEvent.City} is {eventDistance}");
+
                     SendCustomerNotifications(customer, closeEvent);
                 }
                 //simulate successful sending of notification
@@ -217,10 +186,6 @@ namespace TicketsConsole
                     int eventDistance = GetEventDistance(customer, marketingEvent);
                     if (eventDistance < 0) return new List<Event>();
                     eventDistances.Add(new EventDistance(marketingEvent, eventDistance));
-                }
-                foreach(var d in eventDistances)
-                {
-                    Console.WriteLine($"{d.e.Name} and {d}");
                 }
                 return eventDistances.OrderBy(ed => ed.distance).Take(CLOSEST_CITIES_LIMIT).Select(ed => ed.e).ToList();
             }
@@ -250,6 +215,12 @@ namespace TicketsConsole
                     return -1;
                 }
             }
+            private string CityDistanceKey(string cityNameA, string cityNameB)
+            {
+                return string.Compare(cityNameA, cityNameB, StringComparison.OrdinalIgnoreCase) < 0
+                    ? $"{cityNameA} - {cityNameB}"
+                    : $"{cityNameB} - {cityNameA}";
+            }
 
             private void HandleWebException(WebException ex)
             {
@@ -273,22 +244,6 @@ namespace TicketsConsole
                     }
                 }
             }
-
-            private IEnumerable<Event> ClosestEventsToDate(DateTime? date = null, int limit = 1)
-            {
-                var effectiveDate = date ?? DateTime.Now;
-
-                var closestEvents = MarketingEvents.Where(e => e.Date >= effectiveDate).OrderBy(e => e.Date).Take(limit);
-
-                return closestEvents;
-            }
-            private string CityDistanceKey(string cityNameA, string cityNameB)
-            {
-                return string.Compare(cityNameA, cityNameB, StringComparison.OrdinalIgnoreCase) < 0
-                    ? $"{cityNameA} - {cityNameB}"
-                    : $"{cityNameB} - {cityNameA}";
-            }
-
         }
     }
     public static class Extensions
